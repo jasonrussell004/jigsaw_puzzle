@@ -23,7 +23,6 @@
         header {
             margin: 10px 0;
             text-align: center;
-            width: 100%;
         }
 
         h1 {
@@ -34,7 +33,7 @@
         .controls {
             display: flex;
             gap: 10px;
-            justify-content: center;
+            margin-bottom: 10px;
         }
 
         button {
@@ -46,7 +45,6 @@
             border-radius: 6px;
             cursor: pointer;
             transition: background 0.2s;
-            touch-action: manipulation;
         }
 
         button:hover {
@@ -63,6 +61,11 @@
 
         canvas {
             display: block;
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
         }
 
         .instructions {
@@ -90,8 +93,8 @@
     </div>
 
     <div class="instructions">
-        <strong>Mobile Controls:</strong> Use 2 fingers to <strong>Pinch to Zoom</strong> and <strong>Drag to Pan</strong> around the board. <br>
-        Use 1 finger to drag and place pieces. Tap a piece to highlight it, then use buttons to rotate.
+        <strong>Controls:</strong> Drag pieces with mouse/finger. Click/tap to highlight. <br>
+        Press buttons or <strong>Scroll Wheel</strong> while holding a piece to rotate. Snaps to <em>any</em> grid space!
     </div>
 
     <script>
@@ -112,16 +115,6 @@
         let dragOffsetX = 0;
         let dragOffsetY = 0;
 
-        // Viewport Transform State (Zoom & Pan)
-        let scale = 1;
-        let panX = 0;
-        let panY = 0;
-        let isPanning = false;
-        let startPanX = 0;
-        let startPanY = 0;
-        let startTouchDist = 0;
-        let startScale = 1;
-
         const puzzleImg = new Image();
         puzzleImg.src = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80';
         puzzleImg.crossOrigin = "anonymous"; 
@@ -135,6 +128,7 @@
 
         window.addEventListener('resize', () => {
             if (puzzleImg.complete) {
+                // Track relative grid placement data on resize
                 const positions = pieces.map(p => ({
                     currentGridCol: Math.round((p.x - boardX) / pieceWidth),
                     currentGridRow: Math.round((p.y - boardY) / pieceHeight),
@@ -149,6 +143,7 @@
                     p.w = pieceWidth;
                     p.h = pieceHeight;
                     if (positions[i].isSnapped) {
+                        // Re-snap to the adjusted board dimensions dynamically
                         p.x = boardX + positions[i].currentGridCol * pieceWidth;
                         p.y = boardY + positions[i].currentGridRow * pieceHeight;
                     } else {
@@ -170,8 +165,8 @@
             pieceWidth = boardWidth / COLS;
             pieceHeight = boardHeight / ROWS;
 
-            canvas.width = maxW;
-            canvas.height = maxH;
+            canvas.width = Math.min(maxW, boardWidth * 1.6);
+            canvas.height = Math.min(maxH, boardHeight * 1.8);
 
             boardX = (canvas.width - boardWidth) / 2;
             boardY = (canvas.height - boardHeight) / 2;
@@ -180,15 +175,15 @@
         class Piece {
             constructor(id, r, c) {
                 this.id = id;
-                this.r = r; 
-                this.c = c; 
+                this.r = r; // True row
+                this.c = c; // True col
                 this.x = 0; 
                 this.y = 0; 
                 this.w = pieceWidth;
                 this.h = pieceHeight;
                 this.rotation = 0; 
-                this.isSnapped = false; 
-                this.isCorrect = false; 
+                this.isSnapped = false; // Is it dropped on the board grid?
+                this.isCorrect = false; // Is it in its unique rightful place?
             }
 
             draw() {
@@ -198,13 +193,13 @@
 
                 if (highlightedPiece === this) {
                     ctx.shadowColor = "#e11d48";
-                    ctx.shadowBlur = 15 / scale; // Scale shadow size
-                    ctx.lineWidth = 3 / scale;
+                    ctx.shadowBlur = 15;
+                    ctx.lineWidth = 3;
                     ctx.strokeStyle = "#f43f5e";
                 } else {
                     ctx.shadowColor = "rgba(0,0,0,0.4)";
-                    ctx.shadowBlur = 6 / scale;
-                    ctx.lineWidth = 1 / scale;
+                    ctx.shadowBlur = 6;
+                    ctx.lineWidth = 1;
                     ctx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.3)";
                 }
 
@@ -225,18 +220,21 @@
             }
 
             isMouseOver(mx, my) {
-                const pad = 4 / scale; // Adjust touch target dynamically based on zoom level
-                return mx >= this.x - pad && mx <= this.x + this.w + pad && my >= this.y - pad && my <= this.y + this.h + pad;
+                return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h;
             }
 
             snapCheck() {
+                // Center calculations of the piece
                 const midX = this.x + this.w / 2;
                 const midY = this.y + this.h / 2;
 
+                // Check if the piece is over the board area
                 if (midX >= boardX && midX <= boardX + boardWidth && midY >= boardY && midY <= boardY + boardHeight) {
+                    // Find closest grid intersection slot
                     const closestCol = Math.floor((midX - boardX) / this.w);
                     const closestRow = Math.floor((midY - boardY) / this.h);
 
+                    // Bound checks to avoid edge overflow array math
                     if (closestCol >= 0 && closestCol < COLS && closestRow >= 0 && closestRow < ROWS) {
                         this.x = boardX + closestCol * this.w;
                         this.y = boardY + closestRow * this.h;
@@ -263,58 +261,48 @@
                 p.rotation = Math.floor(Math.random() * 4) * 90;
                 p.isSnapped = false;
                 p.isCorrect = false;
-                p.x = Math.random() * (canvas.width - p.w);
-                p.y = Math.random() * (canvas.height - p.h);
+
+                let side = Math.floor(Math.random() * 4);
+                if (side === 0) { 
+                    p.x = Math.random() * (canvas.width - p.w);
+                    p.y = Math.random() * (boardY - p.h);
+                } else if (side === 1) { 
+                    p.x = Math.random() * (canvas.width - p.w);
+                    p.y = boardY + boardHeight + Math.random() * (canvas.height - (boardY + boardHeight) - p.h);
+                } else if (side === 2) { 
+                    p.x = Math.random() * (boardX - p.w);
+                    p.y = Math.random() * (canvas.height - p.h);
+                } else { 
+                    p.x = boardX + boardWidth + Math.random() * (canvas.width - (boardX + boardWidth) - p.w);
+                    p.y = Math.random() * (canvas.height - p.h);
+                }
             });
-            scale = 1;
-            panX = 0;
-            panY = 0;
             highlightedPiece = null;
             selectedPiece = null;
         }
 
-        // Converts screen pixels to world canvas space coordinates taking current pan & zoom into account
-        function screenToWorld(clientX, clientY) {
+        function getMousePos(e) {
             const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return {
-                x: (clientX - rect.left - panX) / scale,
-                y: (clientY - rect.top - panY) / scale
+                x: clientX - rect.left,
+                y: clientY - rect.top
             };
         }
 
         function handlePointerDown(e) {
-            if (e.touches && e.touches.length === 2) {
-                // Two-finger gesture initialized: Switch to Panning/Zooming mode
-                isDragging = false;
-                selectedPiece = null;
-                isPanning = true;
-                
-                const t1 = e.touches[0];
-                const t2 = e.touches[1];
-                
-                startTouchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-                startScale = scale;
-                
-                // Track midpoints for center anchor panning
-                startPanX = ((t1.clientX + t2.clientX) / 2) - panX;
-                startPanY = ((t1.clientY + t2.clientY) / 2) - panY;
-                return;
-            }
-
-            // Normal single finger / mouse down interaction logic
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const worldPos = screenToWorld(clientX, clientY);
+            const pos = getMousePos(e);
             
             selectedPiece = null;
             for (let i = pieces.length - 1; i >= 0; i--) {
                 let p = pieces[i];
-                if (p.isMouseOver(worldPos.x, worldPos.y)) {
+                if (p.isMouseOver(pos.x, pos.y)) {
                     selectedPiece = p;
                     highlightedPiece = p;
                     isDragging = true;
-                    dragOffsetX = worldPos.x - p.x;
-                    dragOffsetY = worldPos.y - p.y;
+                    dragOffsetX = pos.x - p.x;
+                    dragOffsetY = pos.y - p.y;
                     
                     pieces.splice(i, 1);
                     pieces.push(selectedPiece);
@@ -325,66 +313,44 @@
         }
 
         function handlePointerMove(e) {
+            if (!isDragging || !selectedPiece) return;
             if(e.cancelable) e.preventDefault();
 
-            if (isPanning && e.touches && e.touches.length === 2) {
-                const t1 = e.touches[0];
-                const t2 = e.touches[1];
-                
-                // Handle Zoom
-                const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-                scale = Math.max(0.5, Math.min(4, startScale * (currentDist / startTouchDist)));
-                
-                // Handle Pan alongside zoom tracking
-                const midX = (t1.clientX + t2.clientX) / 2;
-                const midY = (t1.clientY + t2.clientY) / 2;
-                panX = midX - startPanX;
-                panY = midY - startPanY;
-                return;
-            }
+            const pos = getMousePos(e);
+            selectedPiece.x = pos.x - dragOffsetX;
+            selectedPiece.y = pos.y - dragOffsetY;
 
-            if (!isDragging || !selectedPiece) return;
-
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const worldPos = screenToWorld(clientX, clientY);
-
-            selectedPiece.x = worldPos.x - dragOffsetX;
-            selectedPiece.y = worldPos.y - dragOffsetY;
-
-            // Enforce canvas limits
             selectedPiece.x = Math.max(0, Math.min(canvas.width - selectedPiece.w, selectedPiece.x));
             selectedPiece.y = Math.max(0, Math.min(canvas.height - selectedPiece.h, selectedPiece.y));
         }
 
-        function handlePointerUp(e) {
-            if (e.touches && e.touches.length > 0) {
-                // If dropping back down to 1 finger, gracefully clear pan variables
-                isPanning = false;
-                return;
-            }
+        function handlePointerUp() {
             if (selectedPiece) {
                 selectedPiece.snapCheck();
                 selectedPiece = null;
                 checkPositions();
             }
             isDragging = false;
-            isPanning = false;
         }
 
         function rotatePiece(dir) {
             let target = selectedPiece || highlightedPiece;
             if (target) {
                 target.rotation += dir === 'cw' ? 90 : -90;
-                if (target.isSnapped) target.snapCheck();
+                if (target.isSnapped) {
+                    target.snapCheck(); // Refresh snap configuration if rotated while nested
+                }
                 checkPositions();
             }
         }
 
         function checkPositions() {
             let totalCorrect = 0;
+
             pieces.forEach(p => {
                 let normalizedRotation = ((p.rotation % 360) + 360) % 360;
+                
+                // Calculate current grid coordinate location matches
                 const currentGridCol = Math.round((p.x - boardX) / pieceWidth);
                 const currentGridRow = Math.round((p.y - boardY) / pieceHeight);
 
@@ -395,43 +361,28 @@
                     p.isCorrect = false;
                 }
             });
+
             if (totalCorrect === pieces.length) {
                 setTimeout(() => alert('🎉 Outstanding! You completed the puzzle!'), 200);
             }
         }
 
-        // Mouse Listeners
+        // Event Handling Engines
         canvas.addEventListener('mousedown', handlePointerDown);
         window.addEventListener('mousemove', handlePointerMove);
         window.addEventListener('mouseup', handlePointerUp);
 
-        // Touch Listeners
         canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
         window.addEventListener('touchmove', handlePointerMove, { passive: false });
         window.addEventListener('touchend', handlePointerUp);
 
-        // Double Duty Wheel Listener (Rotates piece if holding one, zooms canvas if hovering background)
         canvas.addEventListener('wheel', (e) => {
-            e.preventDefault(); 
             if (selectedPiece) {
+                e.preventDefault(); 
                 rotatePiece(e.deltaY < 0 ? 'ccw' : 'cw');
-            } else {
-                // Background Desktop Zoom Utility
-                const rect = canvas.getBoundingClientRect();
-                const mouseX = e.clientX - rect.left;
-                const mouseY = e.clientY - rect.top;
-
-                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-                const nextScale = Math.max(0.5, Math.min(4, scale * zoomFactor));
-
-                // Anchor zoom transformations around mouse cursor
-                panX = mouseX - (mouseX - panX) * (nextScale / scale);
-                panY = mouseY - (mouseY - panY) * (nextScale / scale);
-                scale = nextScale;
             }
         }, { passive: false });
 
-        // Button Listeners
         document.getElementById('rotate-cw').addEventListener('click', () => rotatePiece('cw'));
         document.getElementById('rotate-ccw').addEventListener('click', () => rotatePiece('ccw'));
         document.getElementById('reset-btn').addEventListener('click', scramblePieces);
@@ -444,32 +395,31 @@
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            ctx.save();
-            // Inject coordinate space modifications globally
-            ctx.translate(panX, panY);
-            ctx.scale(scale, scale);
-
-            // 1. Draw Board Grid Lines
+            // Draw Board Base Background Frame
             ctx.fillStyle = '#232329';
             ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
             
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.lineWidth = 1;
             for (let i = 1; i < COLS; i++) {
-                ctx.beginPath(); ctx.moveTo(boardX + i * pieceWidth, boardY); ctx.lineTo(boardX + i * pieceWidth, boardY + boardHeight); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(boardX + i * pieceWidth, boardY);
+                ctx.lineTo(boardX + i * pieceWidth, boardY + boardHeight);
+                ctx.stroke();
             }
             for (let j = 1; j < ROWS; j++) {
-                ctx.beginPath(); ctx.moveTo(boardX, boardY + j * pieceHeight); ctx.lineTo(boardX + boardWidth, boardY + j * pieceHeight); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(boardX, boardY + j * pieceHeight);
+                ctx.lineTo(boardX + boardWidth, boardY + j * pieceHeight);
+                ctx.stroke();
             }
             
             ctx.strokeStyle = '#4f46e5';
             ctx.lineWidth = 3;
             ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
 
-            // 2. Draw Pieces
+            // Render Puzzle Pieces
             pieces.forEach(piece => piece.draw());
-
-            ctx.restore();
 
             requestAnimationFrame(animate);
         }
