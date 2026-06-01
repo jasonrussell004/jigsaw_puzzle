@@ -51,11 +51,6 @@
             background-color: #4338ca;
         }
 
-        button:disabled {
-            background-color: #4b5563;
-            cursor: not-allowed;
-        }
-
         #canvas-container {
             position: relative;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
@@ -99,19 +94,16 @@
 
     <div class="instructions">
         <strong>Controls:</strong> Drag pieces with mouse/finger. Click/tap to highlight. <br>
-        Press buttons or <strong>Scroll Wheel</strong> while holding a piece to rotate. Snaps into the center grid!
+        Press buttons or <strong>Scroll Wheel</strong> while holding a piece to rotate. Snaps to <em>any</em> grid space!
     </div>
 
     <script>
         const canvas = document.getElementById('puzzleCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Layout Config (5x10 grid = 50 pieces)
         const ROWS = 5;
         const COLS = 10;
-        const TOTAL_PIECES = ROWS * COLS;
         
-        // Dynamic sizing based on window
         let pieceWidth, pieceHeight;
         let boardWidth, boardHeight;
         let boardX, boardY;
@@ -123,10 +115,9 @@
         let dragOffsetX = 0;
         let dragOffsetY = 0;
 
-        // Load a placeholder high-quality image from Unsplash
         const puzzleImg = new Image();
         puzzleImg.src = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80';
-        puzzleImg.crossOrigin = "anonymous"; // Handle CORS if changing source
+        puzzleImg.crossOrigin = "anonymous"; 
 
         puzzleImg.onload = () => {
             initDimensions();
@@ -137,36 +128,46 @@
 
         window.addEventListener('resize', () => {
             if (puzzleImg.complete) {
-                // Save relative positions before resizing
-                const positions = pieces.map(p => ({x: p.x / canvas.width, y: p.y / canvas.height}));
+                // Track relative grid placement data on resize
+                const positions = pieces.map(p => ({
+                    currentGridCol: Math.round((p.x - boardX) / pieceWidth),
+                    currentGridRow: Math.round((p.y - boardY) / pieceHeight),
+                    isSnapped: p.isSnapped,
+                    relX: p.x / canvas.width,
+                    relY: p.y / canvas.height
+                }));
+
                 initDimensions();
-                // Restore relative positions
+
                 pieces.forEach((p, i) => {
-                    p.x = positions[i].x * canvas.width;
-                    p.y = positions[i].y * canvas.height;
                     p.w = pieceWidth;
                     p.h = pieceHeight;
+                    if (positions[i].isSnapped) {
+                        // Re-snap to the adjusted board dimensions dynamically
+                        p.x = boardX + positions[i].currentGridCol * pieceWidth;
+                        p.y = boardY + positions[i].currentGridRow * pieceHeight;
+                    } else {
+                        p.x = positions[i].relX * canvas.width;
+                        p.y = positions[i].relY * canvas.height;
+                    }
                 });
+                checkPositions();
             }
         });
 
         function initDimensions() {
-            // Scale canvas to fit viewport comfortably
             const maxW = window.innerWidth * 0.95;
             const maxH = window.innerHeight * 0.70;
             
-            // Base aspect ratio of the board (10:5 -> 2:1)
             boardWidth = Math.min(maxW * 0.6, maxH * 2 * 0.6); 
             boardHeight = boardWidth / 2;
 
             pieceWidth = boardWidth / COLS;
             pieceHeight = boardHeight / ROWS;
 
-            // Total canvas size leaves room around the board for loose pieces
             canvas.width = Math.min(maxW, boardWidth * 1.6);
             canvas.height = Math.min(maxH, boardHeight * 1.8);
 
-            // Center the puzzle board on the canvas
             boardX = (canvas.width - boardWidth) / 2;
             boardY = (canvas.height - boardHeight) / 2;
         }
@@ -174,42 +175,39 @@
         class Piece {
             constructor(id, r, c) {
                 this.id = id;
-                this.r = r; // Correct row
-                this.c = c; // Correct col
-                this.x = 0; // Current canvas X
-                this.y = 0; // Current canvas Y
+                this.r = r; // True row
+                this.c = c; // True col
+                this.x = 0; 
+                this.y = 0; 
                 this.w = pieceWidth;
                 this.h = pieceHeight;
-                this.rotation = 0; // 0, 90, 180, 270 degrees
-                this.isCorrect = false;
+                this.rotation = 0; 
+                this.isSnapped = false; // Is it dropped on the board grid?
+                this.isCorrect = false; // Is it in its unique rightful place?
             }
 
             draw() {
                 ctx.save();
-                // Move to center of piece for rotation tracking
                 ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
                 ctx.rotate((this.rotation * Math.PI) / 180);
 
-                // Highlight Effect
                 if (highlightedPiece === this) {
                     ctx.shadowColor = "#e11d48";
                     ctx.shadowBlur = 15;
-                    ctx.lineWidth = 4;
+                    ctx.lineWidth = 3;
                     ctx.strokeStyle = "#f43f5e";
                 } else {
-                    ctx.shadowColor = "rgba(0,0,0,0.3)";
-                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = "rgba(0,0,0,0.4)";
+                    ctx.shadowBlur = 6;
                     ctx.lineWidth = 1;
-                    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+                    ctx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.3)";
                 }
 
-                // Draw snippet of image
                 ctx.beginPath();
                 ctx.rect(-this.w / 2, -this.h / 2, this.w, this.h);
-                ctx.fill(); // For shadow clipping
+                ctx.fill(); 
                 ctx.stroke();
                 
-                // Crop math on original image source
                 const sx = (this.c * puzzleImg.width) / COLS;
                 const sy = (this.r * puzzleImg.height) / ROWS;
                 const sw = puzzleImg.width / COLS;
@@ -222,26 +220,29 @@
             }
 
             isMouseOver(mx, my) {
-                // Accurate bounds check accounting for center-origin logic
                 return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h;
             }
 
             snapCheck() {
-                // Calculate where this piece belongs on the canvas grid
-                const targetX = boardX + this.c * this.w;
-                const targetY = boardY + this.r * this.h;
-                
-                const distance = Math.hypot(this.x - targetX, this.y - targetY);
+                // Center calculations of the piece
+                const midX = this.x + this.w / 2;
+                const midY = this.y + this.h / 2;
 
-                // Snap if within 25px tolerance and rotated correctly
-                if (distance < 25 && this.rotation % 360 === 0) {
-                    this.x = targetX;
-                    this.y = targetY;
-                    this.isCorrect = true;
-                    if (highlightedPiece === this) highlightedPiece = null;
-                } else {
-                    this.isCorrect = false;
+                // Check if the piece is over the board area
+                if (midX >= boardX && midX <= boardX + boardWidth && midY >= boardY && midY <= boardY + boardHeight) {
+                    // Find closest grid intersection slot
+                    const closestCol = Math.floor((midX - boardX) / this.w);
+                    const closestRow = Math.floor((midY - boardY) / this.h);
+
+                    // Bound checks to avoid edge overflow array math
+                    if (closestCol >= 0 && closestCol < COLS && closestRow >= 0 && closestRow < ROWS) {
+                        this.x = boardX + closestCol * this.w;
+                        this.y = boardY + closestRow * this.h;
+                        this.isSnapped = true;
+                        return;
+                    }
                 }
+                this.isSnapped = false;
             }
         }
 
@@ -257,22 +258,21 @@
 
         function scramblePieces() {
             pieces.forEach(p => {
-                // Assign random rotations in 90-degree increments
                 p.rotation = Math.floor(Math.random() * 4) * 90;
+                p.isSnapped = false;
                 p.isCorrect = false;
 
-                // Place outside the target center board layout area
                 let side = Math.floor(Math.random() * 4);
-                if (side === 0) { // Top
+                if (side === 0) { 
                     p.x = Math.random() * (canvas.width - p.w);
                     p.y = Math.random() * (boardY - p.h);
-                } else if (side === 1) { // Bottom
+                } else if (side === 1) { 
                     p.x = Math.random() * (canvas.width - p.w);
                     p.y = boardY + boardHeight + Math.random() * (canvas.height - (boardY + boardHeight) - p.h);
-                } else if (side === 2) { // Left
+                } else if (side === 2) { 
                     p.x = Math.random() * (boardX - p.w);
                     p.y = Math.random() * (canvas.height - p.h);
-                } else { // Right
+                } else { 
                     p.x = boardX + boardWidth + Math.random() * (canvas.width - (boardX + boardWidth) - p.w);
                     p.y = Math.random() * (canvas.height - p.h);
                 }
@@ -281,11 +281,8 @@
             selectedPiece = null;
         }
 
-        // --- Interaction Logic ---
-
         function getMousePos(e) {
             const rect = canvas.getBoundingClientRect();
-            // Support both mouse events and touch vectors
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return {
@@ -297,36 +294,32 @@
         function handlePointerDown(e) {
             const pos = getMousePos(e);
             
-            // Cycle backward through array to select topmost rendered layer
             selectedPiece = null;
             for (let i = pieces.length - 1; i >= 0; i--) {
                 let p = pieces[i];
-                if (!p.isCorrect && p.isMouseOver(pos.x, pos.y)) {
+                if (p.isMouseOver(pos.x, pos.y)) {
                     selectedPiece = p;
                     highlightedPiece = p;
                     isDragging = true;
                     dragOffsetX = pos.x - p.x;
                     dragOffsetY = pos.y - p.y;
                     
-                    // Pop piece to the top of the stack layer arrays
                     pieces.splice(i, 1);
                     pieces.push(selectedPiece);
                     break;
                 }
             }
-            if(!selectedPiece) highlightedPiece = null; // tapped empty space
+            if(!selectedPiece && !e.touches) highlightedPiece = null; 
         }
 
         function handlePointerMove(e) {
             if (!isDragging || !selectedPiece) return;
-            // Prevent scrolling on mobile devices while dragging
             if(e.cancelable) e.preventDefault();
 
             const pos = getMousePos(e);
             selectedPiece.x = pos.x - dragOffsetX;
             selectedPiece.y = pos.y - dragOffsetY;
 
-            // Enforce canvas borders bounding box
             selectedPiece.x = Math.max(0, Math.min(canvas.width - selectedPiece.w, selectedPiece.x));
             selectedPiece.y = Math.max(0, Math.min(canvas.height - selectedPiece.h, selectedPiece.y));
         }
@@ -335,40 +328,54 @@
             if (selectedPiece) {
                 selectedPiece.snapCheck();
                 selectedPiece = null;
-                checkWinCondition();
+                checkPositions();
             }
             isDragging = false;
         }
 
         function rotatePiece(dir) {
             let target = selectedPiece || highlightedPiece;
-            if (target && !target.isCorrect) {
+            if (target) {
                 target.rotation += dir === 'cw' ? 90 : -90;
-                target.snapCheck();
-                checkWinCondition();
+                if (target.isSnapped) {
+                    target.snapCheck(); // Refresh snap configuration if rotated while nested
+                }
+                checkPositions();
             }
         }
 
-        function checkWinCondition() {
-            const win = pieces.every(p => p.isCorrect);
-            if(win) {
+        function checkPositions() {
+            let totalCorrect = 0;
+
+            pieces.forEach(p => {
+                let normalizedRotation = ((p.rotation % 360) + 360) % 360;
+                
+                // Calculate current grid coordinate location matches
+                const currentGridCol = Math.round((p.x - boardX) / pieceWidth);
+                const currentGridRow = Math.round((p.y - boardY) / pieceHeight);
+
+                if (p.isSnapped && normalizedRotation === 0 && currentGridCol === p.c && currentGridRow === p.r) {
+                    p.isCorrect = true;
+                    totalCorrect++;
+                } else {
+                    p.isCorrect = false;
+                }
+            });
+
+            if (totalCorrect === pieces.length) {
                 setTimeout(() => alert('🎉 Outstanding! You completed the puzzle!'), 200);
             }
         }
 
-        // --- Event Listeners Bindings ---
-
-        // Mouse Listeners
+        // Event Handling Engines
         canvas.addEventListener('mousedown', handlePointerDown);
         window.addEventListener('mousemove', handlePointerMove);
         window.addEventListener('mouseup', handlePointerUp);
 
-        // Touch Listeners
         canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
         window.addEventListener('touchmove', handlePointerMove, { passive: false });
         window.addEventListener('touchend', handlePointerUp);
 
-        // Scroll Wheel Rotation Engine
         canvas.addEventListener('wheel', (e) => {
             if (selectedPiece) {
                 e.preventDefault(); 
@@ -376,22 +383,19 @@
             }
         }, { passive: false });
 
-        // Button Controls
         document.getElementById('rotate-cw').addEventListener('click', () => rotatePiece('cw'));
         document.getElementById('rotate-ccw').addEventListener('click', () => rotatePiece('ccw'));
         document.getElementById('reset-btn').addEventListener('click', scramblePieces);
 
-        // Keyboard Fallback (Arrow Keys or R for Rotation)
         window.addEventListener('keydown', (e) => {
             if(e.key === 'r' || e.key === 'R' || e.key === 'ArrowRight') rotatePiece('cw');
             if(e.key === 'ArrowLeft') rotatePiece('ccw');
         });
 
-        // --- Main Game Render Loop ---
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Draw Target Grid Gridlines Placement Board Frame
+            // Draw Board Base Background Frame
             ctx.fillStyle = '#232329';
             ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
             
@@ -414,7 +418,7 @@
             ctx.lineWidth = 3;
             ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
 
-            // 2. Render Pieces
+            // Render Puzzle Pieces
             pieces.forEach(piece => piece.draw());
 
             requestAnimationFrame(animate);
