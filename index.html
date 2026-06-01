@@ -21,42 +21,36 @@
         }
 
         header {
-            margin: 5px 0;
+            margin: 10px 0;
             text-align: center;
             width: 100%;
         }
 
         h1 {
-            margin: 0 0 3px 0;
-            font-size: 1.2rem;
+            margin: 0 0 5px 0;
+            font-size: 1.5rem;
         }
 
         .controls {
             display: flex;
-            gap: 6px;
+            gap: 10px;
             justify-content: center;
-            flex-wrap: wrap;
-            padding: 0 10px;
         }
 
         button {
             background-color: #4f46e5;
             color: white;
             border: none;
-            padding: 6px 12px;
-            font-size: 0.85rem;
+            padding: 8px 16px;
+            font-size: 0.9rem;
             border-radius: 6px;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
+            transition: background 0.2s;
             touch-action: manipulation;
         }
 
-        button:active {
-            transform: scale(0.95);
-        }
-
-        button.active {
-            background-color: #e11d48;
+        button:hover {
+            background-color: #4338ca;
         }
 
         #canvas-container {
@@ -65,7 +59,6 @@
             border-radius: 8px;
             overflow: hidden;
             background: #2d2d35;
-            margin-top: 5px;
         }
 
         canvas {
@@ -73,12 +66,11 @@
         }
 
         .instructions {
-            margin-top: 6px;
-            font-size: 0.75rem;
+            margin-top: 8px;
+            font-size: 0.8rem;
             color: #a1a1aa;
             text-align: center;
             max-width: 90%;
-            line-height: 1.3;
         }
     </style>
 </head>
@@ -87,10 +79,9 @@
     <header>
         <h1>Jigsaw Puzzle Solver</h1>
         <div class="controls">
-            <button id="rotate-ccw">↺ CCW</button>
-            <button id="rotate-cw">↻ CW</button>
-            <button id="zoom-toggle" class="active">🔍 Loupe: ON</button>
-            <button id="reset-btn">Scramble</button>
+            <button id="rotate-ccw">↺ Rotate CCW</button>
+            <button id="rotate-cw">↻ Rotate CW</button>
+            <button id="reset-btn">Scramble / New Game</button>
         </div>
     </header>
 
@@ -99,7 +90,8 @@
     </div>
 
     <div class="instructions">
-        <strong>Mobile Tip:</strong> Tap a piece to highlight it, then use <strong>CCW / CW</strong> buttons to spin it. Turn on the <strong>Loupe</strong> to see underneath your thumb!
+        <strong>Mobile Controls:</strong> Use 2 fingers to <strong>Pinch to Zoom</strong> and <strong>Drag to Pan</strong> around the board. <br>
+        Use 1 finger to drag and place pieces. Tap a piece to highlight it, then use buttons to rotate.
     </div>
 
     <script>
@@ -119,10 +111,16 @@
         let isDragging = false;
         let dragOffsetX = 0;
         let dragOffsetY = 0;
-        
-        // Touch enhancements
-        let lastPointerPos = { x: 0, y: 0 };
-        let useLoupe = true;
+
+        // Viewport Transform State (Zoom & Pan)
+        let scale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let startPanX = 0;
+        let startPanY = 0;
+        let startTouchDist = 0;
+        let startScale = 1;
 
         const puzzleImg = new Image();
         puzzleImg.src = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80';
@@ -163,13 +161,10 @@
         });
 
         function initDimensions() {
-            // Give layout breathing room on smaller viewports
-            const maxW = window.innerWidth * 0.98;
-            const maxH = window.innerHeight * 0.72;
+            const maxW = window.innerWidth * 0.95;
+            const maxH = window.innerHeight * 0.70;
             
-            // Adjust board size layout rules dynamically for mobile portraits vs landscapes
-            const scalar = window.innerWidth < 600 ? 0.75 : 0.6;
-            boardWidth = Math.min(maxW * scalar, maxH * 2 * scalar); 
+            boardWidth = Math.min(maxW * 0.6, maxH * 2 * 0.6); 
             boardHeight = boardWidth / 2;
 
             pieceWidth = boardWidth / COLS;
@@ -196,49 +191,41 @@
                 this.isCorrect = false; 
             }
 
-            draw(customCtx = ctx, ox = 0, oy = 0) {
-                customCtx.save();
-                
-                // If rendering inside the magnifier lens frame context, offset positions
-                if (customCtx !== ctx) {
-                    customCtx.translate(ox, oy);
-                } else {
-                    customCtx.translate(this.x + this.w / 2, this.y + this.h / 2);
-                }
-                
-                customCtx.rotate((this.rotation * Math.PI) / 180);
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+                ctx.rotate((this.rotation * Math.PI) / 180);
 
-                if (highlightedPiece === this && customCtx === ctx) {
-                    customCtx.shadowColor = "#e11d48";
-                    customCtx.shadowBlur = 15;
-                    customCtx.lineWidth = 3;
-                    customCtx.strokeStyle = "#f43f5e";
+                if (highlightedPiece === this) {
+                    ctx.shadowColor = "#e11d48";
+                    ctx.shadowBlur = 15 / scale; // Scale shadow size
+                    ctx.lineWidth = 3 / scale;
+                    ctx.strokeStyle = "#f43f5e";
                 } else {
-                    customCtx.shadowColor = "rgba(0,0,0,0.4)";
-                    customCtx.shadowBlur = 4;
-                    customCtx.lineWidth = 1;
-                    customCtx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.4)";
+                    ctx.shadowColor = "rgba(0,0,0,0.4)";
+                    ctx.shadowBlur = 6 / scale;
+                    ctx.lineWidth = 1 / scale;
+                    ctx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.3)";
                 }
 
-                customCtx.beginPath();
-                customCtx.rect(-this.w / 2, -this.h / 2, this.w, this.h);
-                customCtx.fill(); 
-                customCtx.stroke();
+                ctx.beginPath();
+                ctx.rect(-this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.fill(); 
+                ctx.stroke();
                 
                 const sx = (this.c * puzzleImg.width) / COLS;
                 const sy = (this.r * puzzleImg.height) / ROWS;
                 const sw = puzzleImg.width / COLS;
                 const sh = puzzleImg.height / ROWS;
 
-                customCtx.drawImage(puzzleImg, sx, sy, sw, sh, -this.w / 2, -this.h / 2, this.w, this.h);
-                customCtx.stroke();
+                ctx.drawImage(puzzleImg, sx, sy, sw, sh, -this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.stroke();
 
-                customCtx.restore();
+                ctx.restore();
             }
 
             isMouseOver(mx, my) {
-                // Expanded touch target padding margin check to allow easier picking on small screens
-                const pad = 6; 
+                const pad = 4 / scale; // Adjust touch target dynamically based on zoom level
                 return mx >= this.x - pad && mx <= this.x + this.w + pad && my >= this.y - pad && my <= this.y + this.h + pad;
             }
 
@@ -276,43 +263,58 @@
                 p.rotation = Math.floor(Math.random() * 4) * 90;
                 p.isSnapped = false;
                 p.isCorrect = false;
-
-                // Keeps pieces fully inside the canvas boundary limits
                 p.x = Math.random() * (canvas.width - p.w);
                 p.y = Math.random() * (canvas.height - p.h);
-                
-                // Prevent scattering directly over the center board at launch if room allows
-                if(p.x + p.w > boardX && p.x < boardX + boardWidth && p.y + p.h > boardY && p.y < boardY + boardHeight) {
-                    p.y = Math.random() > 0.5 ? Math.random() * (boardY - p.h) : boardY + boardHeight + Math.random() * (canvas.height - boardY - boardHeight - p.h);
-                }
             });
+            scale = 1;
+            panX = 0;
+            panY = 0;
             highlightedPiece = null;
             selectedPiece = null;
         }
 
-        function getMousePos(e) {
+        // Converts screen pixels to world canvas space coordinates taking current pan & zoom into account
+        function screenToWorld(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
+                x: (clientX - rect.left - panX) / scale,
+                y: (clientY - rect.top - panY) / scale
             };
         }
 
         function handlePointerDown(e) {
-            const pos = getMousePos(e);
-            lastPointerPos = pos;
+            if (e.touches && e.touches.length === 2) {
+                // Two-finger gesture initialized: Switch to Panning/Zooming mode
+                isDragging = false;
+                selectedPiece = null;
+                isPanning = true;
+                
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                
+                startTouchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                startScale = scale;
+                
+                // Track midpoints for center anchor panning
+                startPanX = ((t1.clientX + t2.clientX) / 2) - panX;
+                startPanY = ((t1.clientY + t2.clientY) / 2) - panY;
+                return;
+            }
+
+            // Normal single finger / mouse down interaction logic
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const worldPos = screenToWorld(clientX, clientY);
             
             selectedPiece = null;
             for (let i = pieces.length - 1; i >= 0; i--) {
                 let p = pieces[i];
-                if (p.isMouseOver(pos.x, pos.y)) {
+                if (p.isMouseOver(worldPos.x, worldPos.y)) {
                     selectedPiece = p;
                     highlightedPiece = p;
                     isDragging = true;
-                    dragOffsetX = pos.x - p.x;
-                    dragOffsetY = pos.y - p.y;
+                    dragOffsetX = worldPos.x - p.x;
+                    dragOffsetY = worldPos.y - p.y;
                     
                     pieces.splice(i, 1);
                     pieces.push(selectedPiece);
@@ -323,26 +325,51 @@
         }
 
         function handlePointerMove(e) {
-            if (!isDragging || !selectedPiece) return;
             if(e.cancelable) e.preventDefault();
 
-            const pos = getMousePos(e);
-            lastPointerPos = pos;
+            if (isPanning && e.touches && e.touches.length === 2) {
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                
+                // Handle Zoom
+                const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                scale = Math.max(0.5, Math.min(4, startScale * (currentDist / startTouchDist)));
+                
+                // Handle Pan alongside zoom tracking
+                const midX = (t1.clientX + t2.clientX) / 2;
+                const midY = (t1.clientY + t2.clientY) / 2;
+                panX = midX - startPanX;
+                panY = midY - startPanY;
+                return;
+            }
 
-            selectedPiece.x = pos.x - dragOffsetX;
-            selectedPiece.y = pos.y - dragOffsetY;
+            if (!isDragging || !selectedPiece) return;
 
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const worldPos = screenToWorld(clientX, clientY);
+
+            selectedPiece.x = worldPos.x - dragOffsetX;
+            selectedPiece.y = worldPos.y - dragOffsetY;
+
+            // Enforce canvas limits
             selectedPiece.x = Math.max(0, Math.min(canvas.width - selectedPiece.w, selectedPiece.x));
             selectedPiece.y = Math.max(0, Math.min(canvas.height - selectedPiece.h, selectedPiece.y));
         }
 
-        function handlePointerUp() {
+        function handlePointerUp(e) {
+            if (e.touches && e.touches.length > 0) {
+                // If dropping back down to 1 finger, gracefully clear pan variables
+                isPanning = false;
+                return;
+            }
             if (selectedPiece) {
                 selectedPiece.snapCheck();
                 selectedPiece = null;
                 checkPositions();
             }
             isDragging = false;
+            isPanning = false;
         }
 
         function rotatePiece(dir) {
@@ -352,70 +379,6 @@
                 if (target.isSnapped) target.snapCheck();
                 checkPositions();
             }
-        }
-
-        function drawLoupe() {
-            if (!isDragging || !selectedPiece || !useLoupe) return;
-
-            // Positioning magnifier glass above touch coordinate vectors safely
-            const radius = 65;
-            const zoomFactor = 1.8;
-            const loupeX = lastPointerPos.x;
-            const loupeY = lastPointerPos.y - radius - 35; 
-
-            ctx.save();
-            
-            // Create circular clipping path
-            ctx.beginPath();
-            ctx.arc(loupeX, loupeY, radius, 0, Math.PI * 2);
-            ctx.closePath();
-            
-            // Outer frame design aesthetics
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = '#4f46e5';
-            ctx.fillStyle = '#232329';
-            ctx.fill();
-            ctx.stroke();
-            ctx.clip();
-
-            // Zoomed render transformation equations
-            ctx.translate(loupeX, loupeY);
-            ctx.scale(zoomFactor, zoomFactor);
-            ctx.translate(-lastPointerPos.x, -lastPointerPos.y);
-
-            // Redraw background grids in magnifier field
-            ctx.fillStyle = '#232329';
-            ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            ctx.lineWidth = 0.5;
-            for (let i = 0; i <= COLS; i++) {
-                ctx.beginPath(); ctx.moveTo(boardX + i * pieceWidth, boardY); ctx.lineTo(boardX + i * pieceWidth, boardY + boardHeight); ctx.stroke();
-            }
-            for (let j = 0; j <= ROWS; j++) {
-                ctx.beginPath(); ctx.moveTo(boardX, boardY + j * pieceHeight); ctx.lineTo(boardX + boardWidth, boardY + j * pieceHeight); ctx.stroke();
-            }
-
-            // Draw items into the zoom viewport container 
-            pieces.forEach(p => {
-                if (p !== selectedPiece) {
-                    p.draw();
-                }
-            });
-
-            // Draw active moving piece inside loupe coordinates 
-            if (selectedPiece) {
-                selectedPiece.draw(ctx, selectedPiece.x + selectedPiece.w / 2, selectedPiece.y + selectedPiece.h / 2);
-            }
-
-            ctx.restore();
-            
-            // Draw Target crosshairs indicator inside loop glass context
-            ctx.strokeStyle = 'rgba(244, 63, 94, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.arc(loupeX, loupeY, 4, 0, Math.PI*2);
-            ctx.stroke();
         }
 
         function checkPositions() {
@@ -437,32 +400,41 @@
             }
         }
 
-        // Event Handling Triggers
+        // Mouse Listeners
         canvas.addEventListener('mousedown', handlePointerDown);
         window.addEventListener('mousemove', handlePointerMove);
         window.addEventListener('mouseup', handlePointerUp);
 
+        // Touch Listeners
         canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
         window.addEventListener('touchmove', handlePointerMove, { passive: false });
         window.addEventListener('touchend', handlePointerUp);
 
+        // Double Duty Wheel Listener (Rotates piece if holding one, zooms canvas if hovering background)
         canvas.addEventListener('wheel', (e) => {
+            e.preventDefault(); 
             if (selectedPiece) {
-                e.preventDefault(); 
                 rotatePiece(e.deltaY < 0 ? 'ccw' : 'cw');
+            } else {
+                // Background Desktop Zoom Utility
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                const nextScale = Math.max(0.5, Math.min(4, scale * zoomFactor));
+
+                // Anchor zoom transformations around mouse cursor
+                panX = mouseX - (mouseX - panX) * (nextScale / scale);
+                panY = mouseY - (mouseY - panY) * (nextScale / scale);
+                scale = nextScale;
             }
         }, { passive: false });
 
+        // Button Listeners
         document.getElementById('rotate-cw').addEventListener('click', () => rotatePiece('cw'));
         document.getElementById('rotate-ccw').addEventListener('click', () => rotatePiece('ccw'));
         document.getElementById('reset-btn').addEventListener('click', scramblePieces);
-        
-        const zoomBtn = document.getElementById('zoom-toggle');
-        zoomBtn.addEventListener('click', () => {
-            useLoupe = !useLoupe;
-            zoomBtn.classList.toggle('active', useLoupe);
-            zoomBtn.innerText = useLoupe ? "🔍 Loupe: ON" : "🔍 Loupe: OFF";
-        });
 
         window.addEventListener('keydown', (e) => {
             if(e.key === 'r' || e.key === 'R' || e.key === 'ArrowRight') rotatePiece('cw');
@@ -472,7 +444,12 @@
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Board Base
+            ctx.save();
+            // Inject coordinate space modifications globally
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+
+            // 1. Draw Board Grid Lines
             ctx.fillStyle = '#232329';
             ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
             
@@ -489,11 +466,10 @@
             ctx.lineWidth = 3;
             ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
 
-            // Render Puzzle Pieces
+            // 2. Draw Pieces
             pieces.forEach(piece => piece.draw());
 
-            // Render Magnifier Glass Layer over top of regular layout
-            drawLoupe();
+            ctx.restore();
 
             requestAnimationFrame(animate);
         }
