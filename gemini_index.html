@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>50-Piece Jigsaw Puzzle</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e24;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        header {
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0 0 5px 0;
+            font-size: 1.5rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background-color: #4f46e5;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: #4338ca;
+        }
+
+        #canvas-container {
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #2d2d35;
+        }
+
+        canvas {
+            display: block;
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        .instructions {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #a1a1aa;
+            text-align: center;
+            max-width: 90%;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Jigsaw Puzzle Solver</h1>
+        <div class="controls">
+            <button id="rotate-ccw">↺ Rotate CCW</button>
+            <button id="rotate-cw">↻ Rotate CW</button>
+            <button id="reset-btn">Scramble / New Game</button>
+        </div>
+    </header>
+
+    <div id="canvas-container">
+        <canvas id="puzzleCanvas"></canvas>
+    </div>
+
+    <div class="instructions">
+        <strong>Controls:</strong> Drag pieces with mouse/finger. Click/tap to highlight. <br>
+        Press buttons or <strong>Scroll Wheel</strong> while holding a piece to rotate. Snaps to <em>any</em> grid space!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('puzzleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const ROWS = 5;
+        const COLS = 10;
+        
+        let pieceWidth, pieceHeight;
+        let boardWidth, boardHeight;
+        let boardX, boardY;
+
+        let pieces = [];
+        let selectedPiece = null;
+        let highlightedPiece = null;
+        let isDragging = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        const puzzleImg = new Image();
+        puzzleImg.src = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80';
+        puzzleImg.crossOrigin = "anonymous"; 
+
+        puzzleImg.onload = () => {
+            initDimensions();
+            createPieces();
+            scramblePieces();
+            animate();
+        };
+
+        window.addEventListener('resize', () => {
+            if (puzzleImg.complete) {
+                // Track relative grid placement data on resize
+                const positions = pieces.map(p => ({
+                    currentGridCol: Math.round((p.x - boardX) / pieceWidth),
+                    currentGridRow: Math.round((p.y - boardY) / pieceHeight),
+                    isSnapped: p.isSnapped,
+                    relX: p.x / canvas.width,
+                    relY: p.y / canvas.height
+                }));
+
+                initDimensions();
+
+                pieces.forEach((p, i) => {
+                    p.w = pieceWidth;
+                    p.h = pieceHeight;
+                    if (positions[i].isSnapped) {
+                        // Re-snap to the adjusted board dimensions dynamically
+                        p.x = boardX + positions[i].currentGridCol * pieceWidth;
+                        p.y = boardY + positions[i].currentGridRow * pieceHeight;
+                    } else {
+                        p.x = positions[i].relX * canvas.width;
+                        p.y = positions[i].relY * canvas.height;
+                    }
+                });
+                checkPositions();
+            }
+        });
+
+        function initDimensions() {
+            const maxW = window.innerWidth * 0.95;
+            const maxH = window.innerHeight * 0.70;
+            
+            boardWidth = Math.min(maxW * 0.6, maxH * 2 * 0.6); 
+            boardHeight = boardWidth / 2;
+
+            pieceWidth = boardWidth / COLS;
+            pieceHeight = boardHeight / ROWS;
+
+            canvas.width = Math.min(maxW, boardWidth * 1.6);
+            canvas.height = Math.min(maxH, boardHeight * 1.8);
+
+            boardX = (canvas.width - boardWidth) / 2;
+            boardY = (canvas.height - boardHeight) / 2;
+        }
+
+        class Piece {
+            constructor(id, r, c) {
+                this.id = id;
+                this.r = r; // True row
+                this.c = c; // True col
+                this.x = 0; 
+                this.y = 0; 
+                this.w = pieceWidth;
+                this.h = pieceHeight;
+                this.rotation = 0; 
+                this.isSnapped = false; // Is it dropped on the board grid?
+                this.isCorrect = false; // Is it in its unique rightful place?
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+                ctx.rotate((this.rotation * Math.PI) / 180);
+
+                if (highlightedPiece === this) {
+                    ctx.shadowColor = "#e11d48";
+                    ctx.shadowBlur = 15;
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = "#f43f5e";
+                } else {
+                    ctx.shadowColor = "rgba(0,0,0,0.4)";
+                    ctx.shadowBlur = 6;
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.3)";
+                }
+
+                ctx.beginPath();
+                ctx.rect(-this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.fill(); 
+                ctx.stroke();
+                
+                const sx = (this.c * puzzleImg.width) / COLS;
+                const sy = (this.r * puzzleImg.height) / ROWS;
+                const sw = puzzleImg.width / COLS;
+                const sh = puzzleImg.height / ROWS;
+
+                ctx.drawImage(puzzleImg, sx, sy, sw, sh, -this.w / 2, -this.h / 2, this.w, this.h);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            isMouseOver(mx, my) {
+                return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h;
+            }
+
+            snapCheck() {
+                // Center calculations of the piece
+                const midX = this.x + this.w / 2;
+                const midY = this.y + this.h / 2;
+
+                // Check if the piece is over the board area
+                if (midX >= boardX && midX <= boardX + boardWidth && midY >= boardY && midY <= boardY + boardHeight) {
+                    // Find closest grid intersection slot
+                    const closestCol = Math.floor((midX - boardX) / this.w);
+                    const closestRow = Math.floor((midY - boardY) / this.h);
+
+                    // Bound checks to avoid edge overflow array math
+                    if (closestCol >= 0 && closestCol < COLS && closestRow >= 0 && closestRow < ROWS) {
+                        this.x = boardX + closestCol * this.w;
+                        this.y = boardY + closestRow * this.h;
+                        this.isSnapped = true;
+                        return;
+                    }
+                }
+                this.isSnapped = false;
+            }
+        }
+
+        function createPieces() {
+            pieces = [];
+            let id = 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    pieces.push(new Piece(id++, r, c));
+                }
+            }
+        }
+
+        function scramblePieces() {
+            pieces.forEach(p => {
+                p.rotation = Math.floor(Math.random() * 4) * 90;
+                p.isSnapped = false;
+                p.isCorrect = false;
+
+                let side = Math.floor(Math.random() * 4);
+                if (side === 0) { 
+                    p.x = Math.random() * (canvas.width - p.w);
+                    p.y = Math.random() * (boardY - p.h);
+                } else if (side === 1) { 
+                    p.x = Math.random() * (canvas.width - p.w);
+                    p.y = boardY + boardHeight + Math.random() * (canvas.height - (boardY + boardHeight) - p.h);
+                } else if (side === 2) { 
+                    p.x = Math.random() * (boardX - p.w);
+                    p.y = Math.random() * (canvas.height - p.h);
+                } else { 
+                    p.x = boardX + boardWidth + Math.random() * (canvas.width - (boardX + boardWidth) - p.w);
+                    p.y = Math.random() * (canvas.height - p.h);
+                }
+            });
+            highlightedPiece = null;
+            selectedPiece = null;
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handlePointerDown(e) {
+            const pos = getMousePos(e);
+            
+            selectedPiece = null;
+            for (let i = pieces.length - 1; i >= 0; i--) {
+                let p = pieces[i];
+                if (p.isMouseOver(pos.x, pos.y)) {
+                    selectedPiece = p;
+                    highlightedPiece = p;
+                    isDragging = true;
+                    dragOffsetX = pos.x - p.x;
+                    dragOffsetY = pos.y - p.y;
+                    
+                    pieces.splice(i, 1);
+                    pieces.push(selectedPiece);
+                    break;
+                }
+            }
+            if(!selectedPiece && !e.touches) highlightedPiece = null; 
+        }
+
+        function handlePointerMove(e) {
+            if (!isDragging || !selectedPiece) return;
+            if(e.cancelable) e.preventDefault();
+
+            const pos = getMousePos(e);
+            selectedPiece.x = pos.x - dragOffsetX;
+            selectedPiece.y = pos.y - dragOffsetY;
+
+            selectedPiece.x = Math.max(0, Math.min(canvas.width - selectedPiece.w, selectedPiece.x));
+            selectedPiece.y = Math.max(0, Math.min(canvas.height - selectedPiece.h, selectedPiece.y));
+        }
+
+        function handlePointerUp() {
+            if (selectedPiece) {
+                selectedPiece.snapCheck();
+                selectedPiece = null;
+                checkPositions();
+            }
+            isDragging = false;
+        }
+
+        function rotatePiece(dir) {
+            let target = selectedPiece || highlightedPiece;
+            if (target) {
+                target.rotation += dir === 'cw' ? 90 : -90;
+                if (target.isSnapped) {
+                    target.snapCheck(); // Refresh snap configuration if rotated while nested
+                }
+                checkPositions();
+            }
+        }
+
+        function checkPositions() {
+            let totalCorrect = 0;
+
+            pieces.forEach(p => {
+                let normalizedRotation = ((p.rotation % 360) + 360) % 360;
+                
+                // Calculate current grid coordinate location matches
+                const currentGridCol = Math.round((p.x - boardX) / pieceWidth);
+                const currentGridRow = Math.round((p.y - boardY) / pieceHeight);
+
+                if (p.isSnapped && normalizedRotation === 0 && currentGridCol === p.c && currentGridRow === p.r) {
+                    p.isCorrect = true;
+                    totalCorrect++;
+                } else {
+                    p.isCorrect = false;
+                }
+            });
+
+            if (totalCorrect === pieces.length) {
+                setTimeout(() => alert('🎉 Outstanding! You completed the puzzle!'), 200);
+            }
+        }
+
+        // Event Handling Engines
+        canvas.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+
+        canvas.addEventListener('wheel', (e) => {
+            if (selectedPiece) {
+                e.preventDefault(); 
+                rotatePiece(e.deltaY < 0 ? 'ccw' : 'cw');
+            }
+        }, { passive: false });
+
+        document.getElementById('rotate-cw').addEventListener('click', () => rotatePiece('cw'));
+        document.getElementById('rotate-ccw').addEventListener('click', () => rotatePiece('ccw'));
+        document.getElementById('reset-btn').addEventListener('click', scramblePieces);
+
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'r' || e.key === 'R' || e.key === 'ArrowRight') rotatePiece('cw');
+            if(e.key === 'ArrowLeft') rotatePiece('ccw');
+        });
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Board Base Background Frame
+            ctx.fillStyle = '#232329';
+            ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < COLS; i++) {
+                ctx.beginPath();
+                ctx.moveTo(boardX + i * pieceWidth, boardY);
+                ctx.lineTo(boardX + i * pieceWidth, boardY + boardHeight);
+                ctx.stroke();
+            }
+            for (let j = 1; j < ROWS; j++) {
+                ctx.beginPath();
+                ctx.moveTo(boardX, boardY + j * pieceHeight);
+                ctx.lineTo(boardX + boardWidth, boardY + j * pieceHeight);
+                ctx.stroke();
+            }
+            
+            ctx.strokeStyle = '#4f46e5';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
+
+            // Render Puzzle Pieces
+            pieces.forEach(piece => piece.draw());
+
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
