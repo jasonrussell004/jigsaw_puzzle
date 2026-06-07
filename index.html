@@ -1,428 +1,744 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>50-Piece Jigsaw Puzzle</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #1e1e24;
-            color: #fff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow: hidden;
-            height: 100vh;
-            user-select: none;
-            -webkit-user-select: none;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Jigsaw Puzzle</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --wood-dark: #4a2e10;
+    --wood-mid:  #7a4f2a;
+    --gold:      #c9922a;
+    --gold-lt:   #e8b84b;
+    --cream:     #f5ead8;
+    --felt:      #2d5a27;
+    --felt-lt:   #3a7232;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        header {
-            margin: 10px 0;
-            text-align: center;
-        }
+  body {
+    background-color: #3a2008;
+    background-image:
+      repeating-linear-gradient(92deg, transparent, transparent 58px, rgba(0,0,0,0.05) 59px),
+      repeating-linear-gradient(2deg,  transparent, transparent 58px, rgba(255,255,255,0.02) 59px),
+      radial-gradient(ellipse at 30% 40%, #5c3d1e 0%, #3a2008 60%, #1e0e00 100%);
+    min-height: 100vh;
+    font-family: 'Lato', sans-serif;
+    color: var(--cream);
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
 
-        h1 {
-            margin: 0 0 5px 0;
-            font-size: 1.5rem;
-        }
+  /* ─ Header ─────────────────────────────── */
+  header {
+    text-align: center;
+    padding: 14px 16px 10px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(201,146,42,0.3);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.3rem, 3vw, 2rem);
+    color: var(--gold-lt);
+    letter-spacing: 0.14em;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.7);
+  }
+  header p { font-size: 0.72rem; color: rgba(245,234,216,0.5); letter-spacing:.07em; margin-top:3px; }
 
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
+  /* ─ Controls ───────────────────────────── */
+  #controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: rgba(0,0,0,0.28);
+    border-bottom: 1px solid rgba(201,146,42,0.18);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .btn {
+    font-family: 'Lato', sans-serif;
+    font-size: 0.76rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 7px 15px;
+    border: 1px solid var(--gold);
+    background: rgba(201,146,42,0.14);
+    color: var(--gold-lt);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    user-select: none;
+  }
+  .btn:hover  { background: rgba(201,146,42,0.3); }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity:.32; cursor:default; pointer-events:none; }
+  .btn.red  { border-color:#b03020; color:#e07060; background:rgba(176,48,32,.1); }
+  .btn.red:hover { background:rgba(176,48,32,.25); }
 
-        button {
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            font-size: 0.9rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
+  #prog-text { font-size:.72rem; color:rgba(245,234,216,.6); letter-spacing:.06em; }
+  #prog-outer { width:110px; height:5px; background:rgba(255,255,255,.1); border-radius:3px; overflow:hidden; }
+  #prog-inner { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-lt)); border-radius:3px; transition:width .3s; }
+  .rot-label  { font-size:.68rem; color:rgba(245,234,216,.4); letter-spacing:.06em; }
 
-        button:hover {
-            background-color: #4338ca;
-        }
+  /* ─ Main area ──────────────────────────── */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 8px 24px;
+    gap: 14px;
+    position: relative;
+  }
 
-        #canvas-container {
-            position: relative;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            border-radius: 8px;
-            overflow: hidden;
-            background: #2d2d35;
-        }
+  /* ─ Board ──────────────────────────────── */
+  #board-wrap { position: relative; flex-shrink: 0; }
 
-        canvas {
-            display: block;
-            cursor: grab;
-        }
+  #board {
+    display: grid;
+    background:
+      repeating-linear-gradient(90deg,rgba(0,0,0,.13) 0,rgba(0,0,0,.13) 1px,transparent 1px,transparent var(--cs)),
+      repeating-linear-gradient(0deg,  rgba(0,0,0,.13) 0,rgba(0,0,0,.13) 1px,transparent 1px,transparent var(--cs)),
+      linear-gradient(135deg, var(--felt) 0%, var(--felt-lt) 100%);
+    border: 3px solid var(--wood-dark);
+    box-shadow:
+      0 0 0 2px var(--wood-mid),
+      0 0 0 5px var(--wood-dark),
+      0 8px 28px rgba(0,0,0,.65),
+      inset 0 0 18px rgba(0,0,0,.22);
+    border-radius: 4px;
+    position: relative;
+  }
 
-        canvas:active {
-            cursor: grabbing;
-        }
+  .cell {
+    border: 1px solid rgba(255,255,255,.06);
+    position: relative;
+  }
+  .cell.drop-hl { background: rgba(232,184,75,.22); border-color: rgba(232,184,75,.5); }
+  .cell.occupied { border-color: transparent; }
 
-        .instructions {
-            margin-top: 8px;
-            font-size: 0.8rem;
-            color: #a1a1aa;
-            text-align: center;
-            max-width: 90%;
-        }
-    </style>
+  /* ─ Tray ───────────────────────────────── */
+  #tray {
+    width: 100%;
+    background:
+      repeating-linear-gradient(45deg,rgba(0,0,0,.08) 0,rgba(0,0,0,.08) 2px,transparent 2px,transparent 12px),
+      linear-gradient(135deg,#4a2e10 0%,#321806 100%);
+    border: 2px solid var(--wood-mid);
+    border-radius: 6px;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,.45), 0 4px 12px rgba(0,0,0,.4);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  #tray-lbl {
+    position:absolute; top:6px; left:10px;
+    font-size:.63rem; letter-spacing:.15em; text-transform:uppercase;
+    color:rgba(196,149,106,.45); pointer-events:none; user-select:none;
+  }
+
+  /* ─ Piece layer (overlay on top of everything) ─ */
+  #piece-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 500;
+  }
+
+  /* ─ Pieces ─────────────────────────────── */
+  .piece {
+    position: absolute;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    pointer-events: all;
+    filter: drop-shadow(2px 3px 5px rgba(0,0,0,.55));
+    will-change: transform;
+  }
+  .piece.dragging {
+    cursor: grabbing;
+    z-index: 900;
+    filter: drop-shadow(4px 6px 12px rgba(0,0,0,.75));
+  }
+  .piece.sel {
+    filter: drop-shadow(0 0 7px rgba(232,184,75,.95)) drop-shadow(2px 3px 5px rgba(0,0,0,.55));
+  }
+  .piece.placed {
+    cursor: default;
+    pointer-events: none;
+    filter: none;
+    z-index: 2;
+  }
+  .piece.placed.sel { filter: none; }
+
+  /* ─ Win overlay ─────────────────────────── */
+  #win {
+    display:none; position:fixed; inset:0;
+    background:rgba(0,0,0,.78); z-index:9999;
+    justify-content:center; align-items:center; flex-direction:column; gap:22px;
+  }
+  #win.show { display:flex; }
+  #win h2 {
+    font-family:'Playfair Display',serif; font-size:clamp(2rem,6vw,3.2rem);
+    color:var(--gold-lt); text-shadow:0 0 30px rgba(232,184,75,.6);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+
+  /* ─ Hint toast ─────────────────────────── */
+  #hint {
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.75); color:rgba(245,234,216,.7);
+    font-size:.68rem; letter-spacing:.07em;
+    padding:6px 14px; border-radius:20px; border:1px solid rgba(201,146,42,.3);
+    pointer-events:none; white-space:nowrap;
+    transition:opacity .4s; z-index:800;
+  }
+</style>
 </head>
 <body>
 
-    <header>
-        <h1>Jigsaw Puzzle Solver</h1>
-        <div class="controls">
-            <button id="rotate-ccw">↺ Rotate CCW</button>
-            <button id="rotate-cw">↻ Rotate CW</button>
-            <button id="reset-btn">Scramble / New Game</button>
-        </div>
-    </header>
+<header>
+  <h1>Jigsaw Puzzle</h1>
+  <p>5 × 10 grid — 50 pieces — drag to board, rotate to match</p>
+</header>
 
-    <div id="canvas-container">
-        <canvas id="puzzleCanvas"></canvas>
-    </div>
+<div id="controls">
+  <span id="prog-text">0 / 50</span>
+  <div id="prog-outer"><div id="prog-inner" style="width:0%"></div></div>
+  <span class="rot-label">Rotate:</span>
+  <button class="btn" id="btn-ccw" disabled>↺ CCW</button>
+  <button class="btn" id="btn-cw"  disabled>↻ CW</button>
+  <button class="btn" id="btn-solve">✦ Solve</button>
+  <button class="btn red" id="btn-reset">↺ Reset</button>
+</div>
 
-    <div class="instructions">
-        <strong>Controls:</strong> Drag pieces with mouse/finger. Click/tap to highlight. <br>
-        Press buttons or <strong>Scroll Wheel</strong> while holding a piece to rotate. Snaps to <em>any</em> grid space!
-    </div>
+<div id="main">
+  <div id="board-wrap">
+    <div id="board"></div>
+  </div>
+  <div id="tray"><span id="tray-lbl">Piece Tray</span></div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('puzzleCanvas');
-        const ctx = canvas.getContext('2d');
+<!-- Fixed overlay — pieces live here so coords are in viewport space -->
+<div id="piece-layer"></div>
 
-        const ROWS = 5;
-        const COLS = 10;
-        
-        let pieceWidth, pieceHeight;
-        let boardWidth, boardHeight;
-        let boardX, boardY;
+<div id="win">
+  <h2>🎉 Puzzle Complete!</h2>
+  <button class="btn" id="btn-win-reset">Play Again</button>
+</div>
 
-        let pieces = [];
-        let selectedPiece = null;
-        let highlightedPiece = null;
-        let isDragging = false;
-        let dragOffsetX = 0;
-        let dragOffsetY = 0;
+<div id="hint">Drag pieces onto the board &bull; Scroll on piece to rotate &bull; Piece must face the right direction to snap</div>
 
-        const puzzleImg = new Image();
-        puzzleImg.src = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1000&q=80';
-        puzzleImg.crossOrigin = "anonymous"; 
+<script>
+// ═══════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════
+const COLS = 10, ROWS = 5, TOTAL = 50;
+const TAB_FRAC = 0.36;   // tab height as fraction of cellSize
 
-        puzzleImg.onload = () => {
-            initDimensions();
-            createPieces();
-            scramblePieces();
-            animate();
-        };
+let CS = 60;             // cellSize (pixels) — computed on init
+let PAD = 0;             // padding around piece canvas = ceil(TAB_FRAC * CS) + 3
+let PIECE_PX = 0;        // canvas size = CS + 2*PAD
 
-        window.addEventListener('resize', () => {
-            if (puzzleImg.complete) {
-                // Track relative grid placement data on resize
-                const positions = pieces.map(p => ({
-                    currentGridCol: Math.round((p.x - boardX) / pieceWidth),
-                    currentGridRow: Math.round((p.y - boardY) / pieceHeight),
-                    isSnapped: p.isSnapped,
-                    relX: p.x / canvas.width,
-                    relY: p.y / canvas.height
-                }));
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let pieces = [];
+let selectedId = null;
+let placedCount = 0;
+let connectors = null;   // { h[r][c], v[r][c] }
 
-                initDimensions();
+// ═══════════════════════════════════════════════════════
+//  COLOUR PALETTE (simulates a gradient "image")
+// ═══════════════════════════════════════════════════════
+function pieceBaseColor(col, row) {
+  const t = col / (COLS - 1), s = row / (ROWS - 1);
+  const r = ~~(220 - t * 90 + s * 20);
+  const g = ~~(155 - t * 55 - s * 45);
+  const b = ~~(70  + t * 130 + s * 70);
+  return [Math.min(255,r), Math.min(255,g), Math.min(255,b)];
+}
 
-                pieces.forEach((p, i) => {
-                    p.w = pieceWidth;
-                    p.h = pieceHeight;
-                    if (positions[i].isSnapped) {
-                        // Re-snap to the adjusted board dimensions dynamically
-                        p.x = boardX + positions[i].currentGridCol * pieceWidth;
-                        p.y = boardY + positions[i].currentGridRow * pieceHeight;
-                    } else {
-                        p.x = positions[i].relX * canvas.width;
-                        p.y = positions[i].relY * canvas.height;
-                    }
-                });
-                checkPositions();
-            }
-        });
+function colorStr([r,g,b], dlt=0) {
+  return `rgb(${clamp(r+dlt)},${clamp(g+dlt)},${clamp(b+dlt)})`;
+}
+function clamp(v){ return Math.max(0,Math.min(255,v)); }
 
-        function initDimensions() {
-            const maxW = window.innerWidth * 0.95;
-            const maxH = window.innerHeight * 0.70;
-            
-            boardWidth = Math.min(maxW * 0.6, maxH * 2 * 0.6); 
-            boardHeight = boardWidth / 2;
+// ═══════════════════════════════════════════════════════
+//  CONNECTORS
+// ═══════════════════════════════════════════════════════
+function buildConnectors() {
+  // hConn[r][c]: connector on the horizontal seam at row r, col c
+  //   r=0 → top border (flat), r=ROWS → bottom border (flat)
+  //   +1 = tab goes DOWN into (r) from (r-1), i.e. bottom of row r-1 has tab sticking down
+  const h = Array.from({length:ROWS+1}, (_,r) =>
+    Array.from({length:COLS}, (_,c) =>
+      (r===0||r===ROWS) ? 0 : (Math.random()<.5?1:-1)
+    )
+  );
+  // vConn[r][c]: connector on the vertical seam at col c, row r
+  //   c=0 → left border (flat), c=COLS → right border (flat)
+  //   +1 = tab goes RIGHT into col c from col c-1
+  const v = Array.from({length:ROWS}, (_,r) =>
+    Array.from({length:COLS+1}, (_,c) =>
+      (c===0||c===COLS) ? 0 : (Math.random()<.5?1:-1)
+    )
+  );
+  return {h, v};
+}
 
-            pieceWidth = boardWidth / COLS;
-            pieceHeight = boardHeight / ROWS;
+// For piece at (col,row), return [topTab, rightTab, bottomTab, leftTab]
+// tab > 0 means tab sticks OUT from this piece on that edge
+function getPieceTabs(col, row) {
+  const {h, v} = connectors;
+  // top: hConn[row][col]; +1 means tab sticks DOWN from the piece above,
+  //   so for this piece's top edge: -1 (slot) when h[row][col]=+1
+  const top    = -h[row][col];
+  // bottom: hConn[row+1][col]; +1 means tab sticks DOWN from this piece
+  const bottom =  h[row+1][col];
+  // left: vConn[row][col]; +1 means tab sticks RIGHT from piece to left,
+  //   so this piece's left edge is a slot: -vConn[row][col]
+  const left   = -v[row][col];
+  // right: vConn[row][col+1]; +1 means tab sticks right from this piece
+  const right  =  v[row][col+1];
+  return [top, right, bottom, left];
+}
 
-            canvas.width = Math.min(maxW, boardWidth * 1.6);
-            canvas.height = Math.min(maxH, boardHeight * 1.8);
+// ═══════════════════════════════════════════════════════
+//  PIECE DRAWING
+// ═══════════════════════════════════════════════════════
+function drawPieceCanvas(canvas, p, highlighted) {
+  const cs = CS, pad = PAD, px = PIECE_PX;
+  canvas.width = px;
+  canvas.height = px;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, px, px);
 
-            boardX = (canvas.width - boardWidth) / 2;
-            boardY = (canvas.height - boardHeight) / 2;
-        }
+  // After rotation, which physical edge has which logical tab?
+  // rotation 0: tabs = [top,right,bottom,left] as-is
+  // rotation 1 (CW 90°): visual top = logical left, etc.
+  const [t0,r0,b0,l0] = p.tabs;
+  let edgeTabs; // [visual-top, visual-right, visual-bottom, visual-left]
+  switch(p.rotation % 4) {
+    case 0: edgeTabs=[t0,r0,b0,l0]; break;
+    case 1: edgeTabs=[l0,t0,r0,b0]; break; // CW once: left→top, top→right...
+    case 2: edgeTabs=[b0,l0,t0,r0]; break;
+    case 3: edgeTabs=[r0,b0,l0,t0]; break;
+  }
+  // negate for the visual: +1 tabs stick OUT from the piece body
+  // in our connector system, +1 already means "tab out"
 
-        class Piece {
-            constructor(id, r, c) {
-                this.id = id;
-                this.r = r; // True row
-                this.c = c; // True col
-                this.x = 0; 
-                this.y = 0; 
-                this.w = pieceWidth;
-                this.h = pieceHeight;
-                this.rotation = 0; 
-                this.isSnapped = false; // Is it dropped on the board grid?
-                this.isCorrect = false; // Is it in its unique rightful place?
-            }
+  const x0=pad, y0=pad, x1=pad+cs, y1=pad+cs;
+  const T = TAB_FRAC * cs;
 
-            draw() {
-                ctx.save();
-                ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
-                ctx.rotate((this.rotation * Math.PI) / 180);
+  function bezEdge(ax,ay,bx,by,tabVal) {
+    if(tabVal===0){ ctx.lineTo(bx,by); return; }
+    const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy);
+    const px=-dy/len, py=dx/len; // perpendicular (pointing "out" for +1)
+    const sign = tabVal; // +1 out, -1 in
+    const mx=(ax+bx)/2, my=(ay+by)/2;
+    ctx.lineTo(ax+dx*.28, ay+dy*.28);
+    ctx.bezierCurveTo(
+      ax+dx*.28+px*T*sign, ay+dy*.28+py*T*sign,
+      mx-dx*.12+px*T*sign, my-dy*.12+py*T*sign,
+      mx+px*T*sign, my+py*T*sign
+    );
+    ctx.bezierCurveTo(
+      mx+dx*.12+px*T*sign, my+dy*.12+py*T*sign,
+      bx-dx*.28+px*T*sign, by-dy*.28+py*T*sign,
+      bx-dx*.28, by-dy*.28
+    );
+    ctx.lineTo(bx,by);
+  }
 
-                if (highlightedPiece === this) {
-                    ctx.shadowColor = "#e11d48";
-                    ctx.shadowBlur = 15;
-                    ctx.lineWidth = 3;
-                    ctx.strokeStyle = "#f43f5e";
-                } else {
-                    ctx.shadowColor = "rgba(0,0,0,0.4)";
-                    ctx.shadowBlur = 6;
-                    ctx.lineWidth = 1;
-                    ctx.strokeStyle = this.isSnapped ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.3)";
-                }
+  ctx.beginPath();
+  ctx.moveTo(x0,y0);
+  bezEdge(x0,y0, x1,y0, edgeTabs[0]);   // top
+  bezEdge(x1,y0, x1,y1, edgeTabs[1]);   // right
+  bezEdge(x1,y1, x0,y1, edgeTabs[2]);   // bottom (L→R becomes R→L so sign flips in perpendicular direction... handled by draw direction)
+  bezEdge(x0,y1, x0,y0, edgeTabs[3]);   // left
+  ctx.closePath();
 
-                ctx.beginPath();
-                ctx.rect(-this.w / 2, -this.h / 2, this.w, this.h);
-                ctx.fill(); 
-                ctx.stroke();
-                
-                const sx = (this.c * puzzleImg.width) / COLS;
-                const sy = (this.r * puzzleImg.height) / ROWS;
-                const sw = puzzleImg.width / COLS;
-                const sh = puzzleImg.height / ROWS;
+  // Fill
+  const bc = p.baseColor;
+  const grad = ctx.createLinearGradient(x0,y0,x1,y1);
+  grad.addColorStop(0, colorStr(bc, 22));
+  grad.addColorStop(1, colorStr(bc,-22));
+  ctx.fillStyle = grad;
+  ctx.fill();
 
-                ctx.drawImage(puzzleImg, sx, sy, sw, sh, -this.w / 2, -this.h / 2, this.w, this.h);
-                ctx.stroke();
+  // Subtle texture lines
+  ctx.save();
+  ctx.clip();
+  ctx.globalAlpha = 0.07;
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  for(let i=0;i<cs+cs;i+=9){
+    ctx.beginPath(); ctx.moveTo(x0+i,y0); ctx.lineTo(x0,y0+i); ctx.stroke();
+  }
+  // Diagonal highlight
+  const hl = ctx.createLinearGradient(x0,y0,x1,y1);
+  hl.addColorStop(0,'rgba(255,255,255,0.18)');
+  hl.addColorStop(0.5,'rgba(255,255,255,0)');
+  hl.addColorStop(1,'rgba(0,0,0,0.12)');
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = hl;
+  ctx.fillRect(x0,y0,cs,cs);
+  ctx.restore();
 
-                ctx.restore();
-            }
+  // Stroke
+  ctx.strokeStyle = highlighted ? 'rgba(232,184,75,0.95)' : 'rgba(15,8,2,0.82)';
+  ctx.lineWidth   = highlighted ? 2.8 : 1.6;
+  ctx.stroke();
 
-            isMouseOver(mx, my) {
-                return mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h;
-            }
+  // Index label
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = `${Math.max(8,~~(cs*.17))}px Lato,sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(p.id+1, (x0+x1)/2, (y0+y1)/2);
+}
 
-            snapCheck() {
-                // Center calculations of the piece
-                const midX = this.x + this.w / 2;
-                const midY = this.y + this.h / 2;
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+function computeSizes() {
+  const vw = Math.min(window.innerWidth, 960);
+  CS = Math.max(40, Math.floor((vw - 24) / COLS));
+  PAD = Math.ceil(TAB_FRAC * CS) + 3;
+  PIECE_PX = CS + 2*PAD;
+}
 
-                // Check if the piece is over the board area
-                if (midX >= boardX && midX <= boardX + boardWidth && midY >= boardY && midY <= boardY + boardHeight) {
-                    // Find closest grid intersection slot
-                    const closestCol = Math.floor((midX - boardX) / this.w);
-                    const closestRow = Math.floor((midY - boardY) / this.h);
+function init() {
+  computeSizes();
+  document.documentElement.style.setProperty('--cs', CS+'px');
 
-                    // Bound checks to avoid edge overflow array math
-                    if (closestCol >= 0 && closestCol < COLS && closestRow >= 0 && closestRow < ROWS) {
-                        this.x = boardX + closestCol * this.w;
-                        this.y = boardY + closestRow * this.h;
-                        this.isSnapped = true;
-                        return;
-                    }
-                }
-                this.isSnapped = false;
-            }
-        }
+  // Build board grid
+  const board = document.getElementById('board');
+  board.style.gridTemplateColumns = `repeat(${COLS},${CS}px)`;
+  board.style.gridTemplateRows    = `repeat(${ROWS},${CS}px)`;
+  board.innerHTML = '';
+  for(let i=0;i<TOTAL;i++){
+    const c=document.createElement('div');
+    c.className='cell'; c.dataset.idx=i;
+    board.appendChild(c);
+  }
 
-        function createPieces() {
-            pieces = [];
-            let id = 0;
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    pieces.push(new Piece(id++, r, c));
-                }
-            }
-        }
+  // Clear piece layer
+  const layer = document.getElementById('piece-layer');
+  layer.innerHTML='';
 
-        function scramblePieces() {
-            pieces.forEach(p => {
-                p.rotation = Math.floor(Math.random() * 4) * 90;
-                p.isSnapped = false;
-                p.isCorrect = false;
+  connectors = buildConnectors();
+  pieces = [];
+  placedCount=0; selectedId=null;
+  updateProgress();
+  updateRotBtns();
 
-                let side = Math.floor(Math.random() * 4);
-                if (side === 0) { 
-                    p.x = Math.random() * (canvas.width - p.w);
-                    p.y = Math.random() * (boardY - p.h);
-                } else if (side === 1) { 
-                    p.x = Math.random() * (canvas.width - p.w);
-                    p.y = boardY + boardHeight + Math.random() * (canvas.height - (boardY + boardHeight) - p.h);
-                } else if (side === 2) { 
-                    p.x = Math.random() * (boardX - p.w);
-                    p.y = Math.random() * (canvas.height - p.h);
-                } else { 
-                    p.x = boardX + boardWidth + Math.random() * (canvas.width - (boardX + boardWidth) - p.w);
-                    p.y = Math.random() * (canvas.height - p.h);
-                }
-            });
-            highlightedPiece = null;
-            selectedPiece = null;
-        }
+  // Build piece objects
+  for(let row=0;row<ROWS;row++){
+    for(let col=0;col<COLS;col++){
+      const id=row*COLS+col;
+      const tabs=getPieceTabs(col,row);
+      const rotation=Math.floor(Math.random()*4);
+      pieces.push({
+        id, col, row,
+        tabs,
+        baseColor: pieceBaseColor(col,row),
+        rotation,
+        placed: false,
+        x:0, y:0,  // viewport px of canvas top-left
+        el: null
+      });
+    }
+  }
 
-        function getMousePos(e) {
-            const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
-        }
+  // Create canvas elements
+  pieces.forEach(p=>{
+    const c=document.createElement('canvas');
+    c.className='piece';
+    c.width=PIECE_PX; c.height=PIECE_PX;
+    c.dataset.id=p.id;
+    c.style.width=PIECE_PX+'px';
+    c.style.height=PIECE_PX+'px';
+    layer.appendChild(c);
+    p.el=c;
+    drawPieceCanvas(c,p,false);
+    attachHandlers(c,p);
+  });
 
-        function handlePointerDown(e) {
-            const pos = getMousePos(e);
-            
-            selectedPiece = null;
-            for (let i = pieces.length - 1; i >= 0; i--) {
-                let p = pieces[i];
-                if (p.isMouseOver(pos.x, pos.y)) {
-                    selectedPiece = p;
-                    highlightedPiece = p;
-                    isDragging = true;
-                    dragOffsetX = pos.x - p.x;
-                    dragOffsetY = pos.y - p.y;
-                    
-                    pieces.splice(i, 1);
-                    pieces.push(selectedPiece);
-                    break;
-                }
-            }
-            if(!selectedPiece && !e.touches) highlightedPiece = null; 
-        }
+  // Scatter pieces in tray
+  layoutTray();
 
-        function handlePointerMove(e) {
-            if (!isDragging || !selectedPiece) return;
-            if(e.cancelable) e.preventDefault();
+  document.getElementById('win').classList.remove('show');
+  // Show hint briefly
+  const hint=document.getElementById('hint');
+  hint.style.opacity='1';
+  setTimeout(()=>hint.style.opacity='0',4000);
+}
 
-            const pos = getMousePos(e);
-            selectedPiece.x = pos.x - dragOffsetX;
-            selectedPiece.y = pos.y - dragOffsetY;
+function layoutTray() {
+  const tray=document.getElementById('tray');
+  const trayRect=tray.getBoundingClientRect();
+  const tw=trayRect.width || CS*COLS;
+  const cols=Math.max(1,Math.floor((tw-12)/(PIECE_PX+6)));
+  const shuffled=[...pieces].sort(()=>Math.random()-.5);
+  shuffled.forEach((p,i)=>{
+    if(p.placed) return;
+    const ci=i%cols, ri=Math.floor(i/cols);
+    const jx=(Math.random()-.5)*5, jy=(Math.random()-.5)*5;
+    const lx=trayRect.left+8+ci*(PIECE_PX+6)+jx;
+    const ly=trayRect.top+22+ri*(PIECE_PX+6)+jy;
+    p.x=lx; p.y=ly;
+    setTransform(p);
+  });
+  // Set tray height to fit all pieces
+  const rows=Math.ceil(pieces.length/cols);
+  tray.style.minHeight=(rows*(PIECE_PX+6)+30)+'px';
+}
 
-            selectedPiece.x = Math.max(0, Math.min(canvas.width - selectedPiece.w, selectedPiece.x));
-            selectedPiece.y = Math.max(0, Math.min(canvas.height - selectedPiece.h, selectedPiece.y));
-        }
+function setTransform(p) {
+  const deg=p.rotation*90;
+  p.el.style.left='0';
+  p.el.style.top='0';
+  p.el.style.transform=`translate(${p.x}px,${p.y}px) rotate(${deg}deg)`;
+}
 
-        function handlePointerUp() {
-            if (selectedPiece) {
-                selectedPiece.snapCheck();
-                selectedPiece = null;
-                checkPositions();
-            }
-            isDragging = false;
-        }
+// ═══════════════════════════════════════════════════════
+//  DRAG
+// ═══════════════════════════════════════════════════════
+let drag=null;
 
-        function rotatePiece(dir) {
-            let target = selectedPiece || highlightedPiece;
-            if (target) {
-                target.rotation += dir === 'cw' ? 90 : -90;
-                if (target.isSnapped) {
-                    target.snapCheck(); // Refresh snap configuration if rotated while nested
-                }
-                checkPositions();
-            }
-        }
+function attachHandlers(el,p){
+  el.addEventListener('mousedown', e=>startDrag(e,p,false));
+  el.addEventListener('touchstart', e=>startDrag(e,p,true),{passive:false});
+  el.addEventListener('wheel', e=>{
+    if(p.placed) return;
+    e.preventDefault();
+    select(p);
+    rotate(p, e.deltaY>0?1:-1);
+  },{passive:false});
+}
 
-        function checkPositions() {
-            let totalCorrect = 0;
+function startDrag(e,p,touch){
+  if(p.placed) return;
+  if(touch) e.preventDefault();
+  select(p);
 
-            pieces.forEach(p => {
-                let normalizedRotation = ((p.rotation % 360) + 360) % 360;
-                
-                // Calculate current grid coordinate location matches
-                const currentGridCol = Math.round((p.x - boardX) / pieceWidth);
-                const currentGridRow = Math.round((p.y - boardY) / pieceHeight);
+  const cx=touch?e.touches[0].clientX:e.clientX;
+  const cy=touch?e.touches[0].clientY:e.clientY;
+  const ox=cx-p.x, oy=cy-p.y;
 
-                if (p.isSnapped && normalizedRotation === 0 && currentGridCol === p.c && currentGridRow === p.r) {
-                    p.isCorrect = true;
-                    totalCorrect++;
-                } else {
-                    p.isCorrect = false;
-                }
-            });
+  p.el.classList.add('dragging');
+  // Bring to front
+  p.el.style.zIndex='900';
 
-            if (totalCorrect === pieces.length) {
-                setTimeout(() => alert('🎉 Outstanding! You completed the puzzle!'), 200);
-            }
-        }
+  drag={p,ox,oy,touch};
+  if(touch){
+    window.addEventListener('touchmove',moveDrag,{passive:false});
+    window.addEventListener('touchend', endDrag);
+  } else {
+    window.addEventListener('mousemove',moveDrag);
+    window.addEventListener('mouseup', endDrag);
+  }
+}
 
-        // Event Handling Engines
-        canvas.addEventListener('mousedown', handlePointerDown);
-        window.addEventListener('mousemove', handlePointerMove);
-        window.addEventListener('mouseup', handlePointerUp);
+function moveDrag(e){
+  if(!drag) return;
+  e.preventDefault();
+  const {p,ox,oy,touch}=drag;
+  const cx=touch?e.touches[0].clientX:e.clientX;
+  const cy=touch?e.touches[0].clientY:e.clientY;
+  p.x=cx-ox; p.y=cy-oy;
+  setTransform(p);
+  highlightCell(cx,cy);
+}
 
-        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
-        window.addEventListener('touchmove', handlePointerMove, { passive: false });
-        window.addEventListener('touchend', handlePointerUp);
+function endDrag(e){
+  if(!drag) return;
+  const {p,touch}=drag;
+  const cx=touch?e.changedTouches[0].clientX:e.clientX;
+  const cy=touch?e.changedTouches[0].clientY:e.clientY;
 
-        canvas.addEventListener('wheel', (e) => {
-            if (selectedPiece) {
-                e.preventDefault(); 
-                rotatePiece(e.deltaY < 0 ? 'ccw' : 'cw');
-            }
-        }, { passive: false });
+  p.el.classList.remove('dragging');
+  p.el.style.zIndex='';
+  clearHighlights();
 
-        document.getElementById('rotate-cw').addEventListener('click', () => rotatePiece('cw'));
-        document.getElementById('rotate-ccw').addEventListener('click', () => rotatePiece('ccw'));
-        document.getElementById('reset-btn').addEventListener('click', scramblePieces);
+  // Attempt board placement
+  const br=document.getElementById('board').getBoundingClientRect();
+  if(cx>=br.left&&cx<=br.right&&cy>=br.top&&cy<=br.bottom){
+    const gc=Math.floor((cx-br.left)/CS);
+    const gr=Math.floor((cy-br.top)/CS);
+    if(gc>=0&&gc<COLS&&gr>=0&&gr<ROWS) tryPlace(p,gc,gr);
+  }
 
-        window.addEventListener('keydown', (e) => {
-            if(e.key === 'r' || e.key === 'R' || e.key === 'ArrowRight') rotatePiece('cw');
-            if(e.key === 'ArrowLeft') rotatePiece('ccw');
-        });
+  drag=null;
+  if(touch){
+    window.removeEventListener('touchmove',moveDrag);
+    window.removeEventListener('touchend',endDrag);
+  } else {
+    window.removeEventListener('mousemove',moveDrag);
+    window.removeEventListener('mouseup',endDrag);
+  }
+}
 
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+function highlightCell(cx,cy){
+  clearHighlights();
+  const br=document.getElementById('board').getBoundingClientRect();
+  if(cx<br.left||cx>br.right||cy<br.top||cy>br.bottom) return;
+  const gc=Math.floor((cx-br.left)/CS), gr=Math.floor((cy-br.top)/CS);
+  if(gc<0||gc>=COLS||gr<0||gr>=ROWS) return;
+  const cell=document.querySelector(`.cell[data-idx="${gr*COLS+gc}"]`);
+  if(cell&&!cell.classList.contains('occupied')) cell.classList.add('drop-hl');
+}
+function clearHighlights(){
+  document.querySelectorAll('.cell.drop-hl').forEach(c=>c.classList.remove('drop-hl'));
+}
 
-            // Draw Board Base Background Frame
-            ctx.fillStyle = '#232329';
-            ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-            ctx.lineWidth = 1;
-            for (let i = 1; i < COLS; i++) {
-                ctx.beginPath();
-                ctx.moveTo(boardX + i * pieceWidth, boardY);
-                ctx.lineTo(boardX + i * pieceWidth, boardY + boardHeight);
-                ctx.stroke();
-            }
-            for (let j = 1; j < ROWS; j++) {
-                ctx.beginPath();
-                ctx.moveTo(boardX, boardY + j * pieceHeight);
-                ctx.lineTo(boardX + boardWidth, boardY + j * pieceHeight);
-                ctx.stroke();
-            }
-            
-            ctx.strokeStyle = '#4f46e5';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
+// ═══════════════════════════════════════════════════════
+//  PLACEMENT
+// ═══════════════════════════════════════════════════════
+function tryPlace(p,gc,gr){
+  // Cell must not be occupied
+  const cellEl=document.querySelector(`.cell[data-idx="${gr*COLS+gc}"]`);
+  if(!cellEl||cellEl.classList.contains('occupied')) return;
 
-            // Render Puzzle Pieces
-            pieces.forEach(piece => piece.draw());
+  // Only snap if piece is correctly oriented (rotation===0) AND placed in correct cell
+  if(p.col!==gc||p.row!==gr||p.rotation!==0){
+    // Give a shake to indicate wrong placement/orientation
+    p.el.style.transition='transform .18s';
+    const ox=p.x, oy=p.y;
+    let t=0;
+    const shake=[8,-8,6,-6,0];
+    function doShake(){
+      if(t>=shake.length){ p.el.style.transition=''; return; }
+      p.x=ox+shake[t]; setTransform(p); t++;
+      setTimeout(doShake,40);
+    }
+    doShake();
+    return;
+  }
 
-            requestAnimationFrame(animate);
-        }
-    </script>
+  // Snap!
+  const br=document.getElementById('board').getBoundingClientRect();
+  p.placed=true;
+  p.rotation=0;
+
+  // Animate to exact position
+  const snapX=br.left+gc*CS-PAD;
+  const snapY=br.top+gr*CS-PAD;
+  p.x=snapX; p.y=snapY;
+  p.el.style.transition='transform .18s ease';
+  setTransform(p);
+  setTimeout(()=>{ p.el.style.transition=''; }, 200);
+
+  p.el.classList.add('placed');
+  if(selectedId===p.id) select(null);
+  cellEl.classList.add('occupied');
+
+  drawPieceCanvas(p.el,p,false);
+
+  placedCount++;
+  updateProgress();
+  if(placedCount===TOTAL){
+    setTimeout(()=>document.getElementById('win').classList.add('show'),500);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  ROTATION
+// ═══════════════════════════════════════════════════════
+function rotate(p,dir){
+  if(p.placed) return;
+  p.rotation=((p.rotation+dir)%4+4)%4;
+  drawPieceCanvas(p.el,p,p.id===selectedId);
+  setTransform(p);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SELECTION
+// ═══════════════════════════════════════════════════════
+function select(p){
+  if(selectedId!==null){
+    const prev=pieces[selectedId];
+    if(prev&&prev.el){
+      prev.el.classList.remove('sel');
+      drawPieceCanvas(prev.el,prev,false);
+    }
+  }
+  selectedId = p?p.id:null;
+  if(p){
+    p.el.classList.add('sel');
+    drawPieceCanvas(p.el,p,true);
+    // Bring to top
+    document.getElementById('piece-layer').appendChild(p.el);
+  }
+  updateRotBtns();
+}
+
+function updateRotBtns(){
+  const has = selectedId!==null && !pieces[selectedId]?.placed;
+  document.getElementById('btn-cw').disabled=!has;
+  document.getElementById('btn-ccw').disabled=!has;
+}
+
+// ═══════════════════════════════════════════════════════
+//  PROGRESS
+// ═══════════════════════════════════════════════════════
+function updateProgress(){
+  document.getElementById('prog-text').textContent=`${placedCount} / ${TOTAL}`;
+  document.getElementById('prog-inner').style.width=`${(placedCount/TOTAL)*100}%`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  AUTO-SOLVE
+// ═══════════════════════════════════════════════════════
+function autoSolve(){
+  const unplaced=pieces.filter(p=>!p.placed);
+  // Sort by position top-left to bottom-right
+  unplaced.sort((a,b)=>a.id-b.id);
+  let delay=0;
+  unplaced.forEach(p=>{
+    setTimeout(()=>{
+      p.rotation=0;
+      const cellEl=document.querySelector(`.cell[data-idx="${p.id}"]`);
+      if(cellEl&&!cellEl.classList.contains('occupied')) tryPlace(p,p.col,p.row);
+    },delay);
+    delay+=30;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  BUTTON WIRING
+// ═══════════════════════════════════════════════════════
+document.getElementById('btn-cw').addEventListener('click',()=>{
+  if(selectedId!==null) rotate(pieces[selectedId],1);
+});
+document.getElementById('btn-ccw').addEventListener('click',()=>{
+  if(selectedId!==null) rotate(pieces[selectedId],-1);
+});
+document.getElementById('btn-solve').addEventListener('click',autoSolve);
+document.getElementById('btn-reset').addEventListener('click',init);
+document.getElementById('btn-win-reset').addEventListener('click',init);
+
+// ═══════════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════════
+let resizeTimer;
+window.addEventListener('resize',()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(init,280);
+});
+
+// ═══════════════════════════════════════════════════════
+//  GO
+// ═══════════════════════════════════════════════════════
+init();
+</script>
 </body>
 </html>
